@@ -1,27 +1,28 @@
-version: '3'
 services:
   session_kicker:
     container_name: session_kicker
-    image: wardpearce/session-kicker
+    build:
+      context: .
+      dockerfile: Dockerfile  # Optional if the file is named `Dockerfile`
     restart: unless-stopped
     ports:
       - "8887:80"
     environment:
-      JELLYFIN_API_KEY: ""
-      JELLYFIN_API_URL: ""
+      JELLYFIN_API_KEY: "b219fb4ea3ed4815ae30b422c7a6e916"
+      JELLYFIN_API_URL: "https://watch.gocloudbox.online"
 
       DONT_KICK_ITEM_TYPE: "movie"
-      CHECK_DELAY_IN_SECONDS: 10.0
-      MESSAGE_TIME_IN_MILLI: 60000
-      MAX_WATCH_TIME_IN_SECONDS: 50.0
+      CHECK_DELAY_IN_SECONDS: 5.0
+      MESSAGE_TIME_IN_MILLI: 200
+      MAX_WATCH_TIME_IN_SECONDS: 60.0
 
       # Leave blank to disable
       ITEM_ID_ON_SESSION_KICKED: ""
 
       WATCH_TIME_OVER_MSG: "You have used up your watch time."
-      NOT_WHITELISTED_MSG: "You aren't whitelisted for unlimited watch time."
+      BLACKLISTED_MSG: "You aren't whitelisted for unlimited watch time."
 
-      RESET_AFTER_IN_HOURS: 24.0
+      RESET_TIME: 00:12
 
       HTTP_HOST: "session_kicker"
       HTTP_PORT: 80
@@ -32,7 +33,7 @@ services:
     depends_on:
       - session_kicker_mongo
     networks:
-      - backend
+      - intranet
 
   session_kicker_mongo:
     image: mongo
@@ -44,11 +45,11 @@ services:
     volumes:
       - session_kicker_mongo_data:/data/db
     networks:
-      - backend
+      - intranet
 
 networks:
-  backend:
-    driver: bridge
+  intranet:
+    external: true
 
 volumes:
   session_kicker_mongo_data:

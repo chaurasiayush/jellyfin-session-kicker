@@ -68,13 +68,13 @@ async def incoming(request: web.BaseRequest):
         ]
 
         if request.method == "POST":
-            await Sessions.db.whitelist.update_one({
+            await Sessions.db.blacklist.update_one({
                 "UserId": json["UserId"].strip()
             }, {
                 "$addToSet": {"MediaTypes": {"$each": media_types}}
             }, upsert=True)
         else:
-            await Sessions.db.whitelist.update_one({
+            await Sessions.db.blacklist.update_one({
                 "UserId": json["UserId"].strip()
             }, {
                 "$pull": {"MediaTypes": {"$in": media_types}}
@@ -85,7 +85,7 @@ async def incoming(request: web.BaseRequest):
         })
     elif request.method == "GET":
         result = []
-        async for row in Sessions.db.whitelist.find():
+        async for row in Sessions.db.blacklist.find():
             result.append({
                 "UserId": row["UserId"],
                 "MediaTypes": row["MediaTypes"]

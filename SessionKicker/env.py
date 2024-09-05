@@ -21,13 +21,13 @@ WATCH_TIME_OVER_MSG = os.getenv(
     "WATCH_TIME_OVER_MSG",
     "You have used up your watch time."
 )
-NOT_WHITELISTED_MSG = os.getenv(
-    "NOT_WHITELISTED_MSG",
+BLACKLISTED_MSG = os.getenv(
+    "BLACKLISTED_MSG",
     "You aren't whitelisted for unlimited watch time."
 )
 
 # leave as 0 to disable
-RESET_AFTER_IN_HOURS = float(os.getenv("RESET_AFTER_IN_HOURS", 24))
+RESET_TIME = os.getenv("RESET_TIME", "00:00")
 
 HTTP_HOST = os.getenv("HTTP_HOST", "localhost")
 HTTP_PORT = int(os.getenv("HTTP_PORT", 8887))

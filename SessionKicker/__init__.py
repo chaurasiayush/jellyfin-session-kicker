@@ -4,7 +4,7 @@ import logging
 
 from sys import stdout
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from motor.motor_asyncio import AsyncIOMotorClient
 from json import JSONDecodeError
 
@@ -23,7 +23,7 @@ from .http import server
 from .env import (
     MAX_WATCH_TIME_IN_SECONDS, DONT_KICK_ITEM_TYPE,
     CHECK_DELAY_IN_SECONDS, JELLYFIN_API_KEY, JELLYFIN_API_URL,
-    RESET_AFTER_IN_HOURS, WATCH_TIME_OVER_MSG, NOT_WHITELISTED_MSG,
+    RESET_TIME, WATCH_TIME_OVER_MSG, BLACKLISTED_MSG,
     ITEM_ID_ON_SESSION_KICKED, DELETE_DEVICE_IF_NO_MEDIA_CONTROLS,
     ACCRUE_BY_DEVICE_INSTEAD_OF_USER, MONGO_DB, MONGO_HOST, MONGO_PORT
 )
@@ -36,19 +36,42 @@ logger.setLevel(logging.DEBUG)
 consoleHandler = logging.StreamHandler(stdout)
 logger.addHandler(consoleHandler)
 
+def parse_reset_time(reset_time_str: str) -> time:
+    """ Parse the time string in the format HH:MM into a time object. """
+    try:
+        hours, minutes = map(int, reset_time_str.split(':'))
+        return time(hours, minutes)
+    except ValueError:
+        # If there's a problem with parsing, default to midnight
+        logger.error(f"Invalid time format for RESET_TIME: {reset_time_str}. Defaulting to 00:00.")
+        return time(0, 0)
 
 class Kicker:
     _http: aiohttp.ClientSession
     _user_sessions = {}
     _id_type = "DeviceId" if ACCRUE_BY_DEVICE_INSTEAD_OF_USER else "UserId"
+    _reset_time = parse_reset_time(RESET_TIME)
 
     def __init__(self) -> None:
         self.__set_next_wipe()
 
+    # def __set_next_wipe(self) -> None:
+    #     self._next_wipe_in = datetime.now() + timedelta(
+    #         hours=RESET_AFTER_IN_HOURS
+    #     )
+
+
     def __set_next_wipe(self) -> None:
-        self._next_wipe_in = datetime.now() + timedelta(
-            hours=RESET_AFTER_IN_HOURS
-        )
+        """ Set the next wipe at the specified time from environment variable """
+        now = datetime.now()
+        next_reset = datetime.combine(now.date(), self._reset_time)
+
+        if now >= next_reset:
+            # If the time for today has passed, set the reset for tomorrow
+            next_reset += timedelta(days=1)
+
+        self._next_wipe_in = next_reset
+        logger.debug(f"Next reset scheduled for {self._next_wipe_in}")
 
     async def _sessions(self) -> List[dict]:
         async with Sessions.http.get("/Sessions") as resp:
@@ -105,12 +128,13 @@ class Kicker:
                     session["NowPlayingItem"]["Id"]):
                 continue
 
-            count = await Sessions.db.whitelist.count_documents({
+            # Updated to check if the user is blacklisted
+            count = await Sessions.db.blacklist.count_documents({
                 self._id_type: session[self._id_type],
                 "MediaTypes": item_type
             })
-            if count > 0:
-                continue
+            if count == 0:
+                continue  # If not blacklisted, continue
 
             inter = JellySession(session["Id"])
 
@@ -118,7 +142,7 @@ class Kicker:
                 self._user_sessions[session[self._id_type]] = 0
                 if "DisplayMessage" in session["SupportedCommands"]:
                     asyncio.create_task(
-                        inter.send_message(NOT_WHITELISTED_MSG)
+                        inter.send_message(BLACKLISTED_MSG)
                     )
 
             if (self._user_sessions[session[self._id_type]]
@@ -168,8 +192,11 @@ class Kicker:
 
         while True:  # Loop forever
             await self.__check()
-            if RESET_AFTER_IN_HOURS and datetime.now() >= self._next_wipe_in:
+            if RESET_TIME and datetime.now() >= self._next_wipe_in:
                 self.__set_next_wipe()
                 self._user_sessions = {}
+                asyncio.create_task(
+                    inter.send_message("Your watch quota is restored!")
+                )
 
             await asyncio.sleep(CHECK_DELAY_IN_SECONDS)
